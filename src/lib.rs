@@ -576,6 +576,7 @@ fn extract_string_arg<'a>(
 
 fn process_css_object(
     obj: &ObjectExpression,
+    span_start: u32,
     filename: &str,
     source: &str,
     theme: Option<&serde_json::Value>,
@@ -586,8 +587,9 @@ fn process_css_object(
     let inner = object_to_css(obj, 1, filename, source, theme, keyframe_names)?;
     let raw_css = format!(".css_obj {{\n{}}}\n", inner);
 
-    // 2. Hash the raw CSS content to produce a stable, unique class name
-    let hash = hash_css(&raw_css);
+    // 2. Hash the filename and AST node position to produce a stable, unique class name
+    let hash_input = format!("{}:{}", filename, span_start);
+    let hash = hash_css(&hash_input);
     let class_name = format!("cls_{}", hash);
 
     process_raw_css_with_placeholder(&raw_css, &class_name, ".css_obj", filename, dir)
@@ -659,7 +661,7 @@ fn process_raw_css_with_placeholder(
     dir: &str,
 ) -> Result<(String, String, Option<String>)> {
     let (css_code, css_map) = run_lightningcss(raw_css, filename, dir)?;
-    let final_css = css_code.replace(placeholder, final_name);
+    let final_css = css_code.replace(placeholder, &format!(".{}", final_name));
     Ok((final_name.to_string(), final_css, css_map))
 }
 
@@ -705,7 +707,8 @@ fn process_global_css_template(
         }
     }
 
-    let hash = hash_css(&raw);
+    let hash_input = format!("{}:{}", filename, tpl.span.start);
+    let hash = hash_css(&hash_input);
     let (css_code, css_map) = run_lightningcss(&raw, filename, dir)?;
     Ok((hash, css_code, css_map))
 }
@@ -746,7 +749,8 @@ fn process_keyframes_template(
     let placeholder_name = "__kf_placeholder__";
     let raw_css = format!("@keyframes {} {{ {} }}", placeholder_name, inner.trim());
 
-    let hash = hash_css(&raw_css);
+    let hash_input = format!("{}:{}", filename, tpl.span.start);
+    let hash = hash_css(&hash_input);
     let kf_name = format!("kf_{}", hash);
 
     let (css_code, css_map) = run_lightningcss(&raw_css, filename, dir)?;
@@ -1028,7 +1032,7 @@ fn walk_expression_ctx<'a, 'b>(
                         if let Some(arg_expr) = first_arg.as_expression() {
                             // Object form: css({ ... })
                             if let Expression::ObjectExpression(obj) = arg_expr {
-                                match process_css_object(obj, ctx.filename, ctx.source, ctx.theme, ctx.keyframe_names, ctx.dir) {
+                                match process_css_object(obj, call.span.start, ctx.filename, ctx.source, ctx.theme, ctx.keyframe_names, ctx.dir) {
                                     Ok((class_name, css_text, css_map)) => {
                                         ctx.replacements.push((call.span.start, call.span.end, format!("\"{}\"", class_name)));
                                         let hash = class_name.strip_prefix("cls_").unwrap_or(&class_name).to_string();
@@ -1041,7 +1045,7 @@ fn walk_expression_ctx<'a, 'b>(
 
                             // Function form: css(({ theme }) => ({ ... }))
                             if let Some(body_obj) = extract_theme_arrow_body(arg_expr) {
-                                match process_css_object(body_obj, ctx.filename, ctx.source, ctx.theme, ctx.keyframe_names, ctx.dir) {
+                                match process_css_object(body_obj, call.span.start, ctx.filename, ctx.source, ctx.theme, ctx.keyframe_names, ctx.dir) {
                                     Ok((class_name, css_text, css_map)) => {
                                         ctx.replacements.push((call.span.start, call.span.end, format!("\"{}\"", class_name)));
                                         let hash = class_name.strip_prefix("cls_").unwrap_or(&class_name).to_string();

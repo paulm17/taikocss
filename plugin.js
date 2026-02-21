@@ -2,50 +2,20 @@ import { createRequire } from 'module'
 
 const require = createRequire(import.meta.url)
 
-/**
- * Load the native binary.
- * 1. Local build first (repo contributors / debug builds).
- * 2. Platform-specific npm package (installed consumers).
- * 3. Descriptive error if neither is available.
- */
 function loadNative() {
-  // 1. Local build — use loader.cjs which loads the .node binary directly,
-  //    bypassing index.js (which is CJS but treated as ESM by Node when
-  //    package.json has "type":"module").
-  try {
-    return require('./loader.cjs')
-  } catch {}
-
-  // 2. Platform-specific optional package (installed consumers)
+  try { return require('./loader.cjs') } catch {}
   const platform = `${process.platform}-${process.arch}`
-  try {
-    return require(`@taikocss/core-${platform}`)
-  } catch (e) {
-    throw new Error(
-      `taikocss: no prebuilt binary found for ${platform}.\n` +
-      `If you are on a supported platform, try reinstalling.\n` +
-      `Supported platforms: darwin-arm64, darwin-x64, linux-x64-gnu, ` +
-      `linux-arm64-gnu, win32-x64-msvc.\n` +
-      `Original error: ${e.message}`
-    )
+  try { return require(`@taikocss/core-${platform}`) } catch (e) {
+    throw new Error(`taikocss: no prebuilt binary found for ${platform}.`)
   }
 }
 
 const { transform } = loadNative()
 
-// ---------------------------------------------------------------------------
-// Internal state
-// ---------------------------------------------------------------------------
-
-/** Maps virtual module ID → { css, map } */
+// Store the actual CSS contents
 const cssMap = new Map()
-
-/** Maps source file path → Set<virtualModuleId> for targeted HMR invalidation */
-const fileToVids = new Map()
-
-// ---------------------------------------------------------------------------
-// Colour scheme CSS variable emission
-// ---------------------------------------------------------------------------
+// Store a version counter to bust the browser cache safely
+const cssVersions = new Map()
 
 function buildColorSchemeCSS(schemeName, variants) {
   const modules = []
@@ -64,16 +34,6 @@ function buildColorSchemeCSS(schemeName, variants) {
   return modules
 }
 
-// ---------------------------------------------------------------------------
-// pigment(options) — the main plugin factory
-// ---------------------------------------------------------------------------
-
-/**
- * Create the zero-runtime CSS Vite plugin.
- *
- * @param {import('./plugin.d.ts').PigmentOptions} [options]
- * @returns {import('vite').Plugin}
- */
 export function pigment(options = {}) {
   const theme = options.theme ?? null
   const themeJson = theme ? JSON.stringify(theme) : null
@@ -83,7 +43,6 @@ export function pigment(options = {}) {
     name: 'taikocss',
     enforce: 'pre',
 
-    // Emit colour scheme virtual modules at startup
     buildStart() {
       if (!theme?.colorSchemes) return
       for (const [schemeName, variants] of Object.entries(theme.colorSchemes)) {
@@ -95,11 +54,7 @@ export function pigment(options = {}) {
 
     transform(code, id) {
       if (!/\.(t|j)sx?$/.test(id) || id.includes('node_modules')) return
-      if (
-        !code.includes('css(') &&
-        !code.includes('globalCss`') &&
-        !code.includes('keyframes`')
-      ) return
+      if (!code.includes('css(') && !code.includes('globalCss`') && !code.includes('keyframes`')) return
 
       let result
       try {
@@ -117,38 +72,26 @@ export function pigment(options = {}) {
 
       let imports = ''
 
-      // Global CSS first (spec §2.5)
-      for (const rule of result.globalCss ?? []) {
-        const vid = `virtual:taikocss/global-${rule.hash}.css`
-        if (!cssMap.has(vid)) {
-          cssMap.set(vid, { css: rule.css, map: rule.map ?? null })
-          imports += `import "${vid}";\n`
-        }
-        if (!fileToVids.has(id)) fileToVids.set(id, new Set())
-        fileToVids.get(id).add(vid)
-      }
+      const processRule = (rule, prefix) => {
+        const vid = prefix ? `virtual:taikocss/${prefix}-${rule.hash}.css` : `virtual:taikocss/${rule.hash}.css`;
+        const existing = cssMap.get(vid);
+        
+        let version = cssVersions.get(vid) || 0;
 
-      // Keyframes
-      for (const kf of result.keyframes ?? []) {
-        const vid = `virtual:taikocss/kf-${kf.hash}.css`
-        if (!cssMap.has(vid)) {
-          cssMap.set(vid, { css: kf.css, map: kf.map ?? null })
-          imports += `import "${vid}";\n`
+        // If the Rust compiler gave us brand new or updated CSS
+        if (!existing || existing.css !== rule.css) {
+          version++; // Bump the cache-buster
+          cssVersions.set(vid, version);
+          cssMap.set(vid, { css: rule.css, map: rule.map ?? null });
         }
-        if (!fileToVids.has(id)) fileToVids.set(id, new Set())
-        fileToVids.get(id).add(vid)
-      }
 
-      // Component CSS rules
-      for (const rule of result.cssRules) {
-        const vid = `virtual:taikocss/${rule.hash}.css`
-        if (!cssMap.has(vid)) {
-          cssMap.set(vid, { css: rule.css, map: rule.map ?? null })
-          imports += `import "${vid}";\n`
-        }
-        if (!fileToVids.has(id)) fileToVids.set(id, new Set())
-        fileToVids.get(id).add(vid)
-      }
+        // Append the ?v= version counter. This guarantees the browser fetches the new styles!
+        imports += `import "${vid}?v=${version}";\n`;
+      };
+
+      for (const rule of result.globalCss ?? []) processRule(rule, 'global');
+      for (const kf of result.keyframes ?? []) processRule(kf, 'kf');
+      for (const rule of result.cssRules) processRule(rule, '');
 
       return {
         code: imports + result.code,
@@ -157,43 +100,27 @@ export function pigment(options = {}) {
     },
 
     resolveId(id) {
-      if (id.startsWith('virtual:taikocss/')) return id
+      // Intercept the ID with OR without the query parameter
+      if (id.startsWith('virtual:taikocss/')) {
+        return '\0' + id;
+      }
     },
 
     load(id) {
-      if (!id.startsWith('virtual:taikocss/')) return
-      const entry = cssMap.get(id)
-      if (!entry) return
-      if (entry.map) {
-        const b64 = Buffer.from(entry.map).toString('base64')
-        return (
-          entry.css +
-          `\n/*# sourceMappingURL=data:application/json;charset=utf-8;base64,${b64} */`
-        )
+      if (id.startsWith('\0virtual:taikocss/')) {
+        // Strip the \0 and the ?v= query parameter to lookup the base filename
+        const cleanId = id.slice(1).split('?')[0];
+        const entry = cssMap.get(cleanId);
+        if (!entry) return;
+
+        if (entry.map) {
+          const b64 = Buffer.from(entry.map).toString('base64');
+          return entry.css + `\n/*# sourceMappingURL=data:application/json;charset=utf-8;base64,${b64} */`;
+        }
+        return entry.css;
       }
-      return entry.css
-    },
-
-    handleHotUpdate({ file, server }) {
-      const vids = fileToVids.get(file)
-      if (!vids || vids.size === 0) return
-
-      const affectedMods = []
-      for (const vid of vids) {
-        cssMap.delete(vid)
-        const mod = server.moduleGraph.getModuleById(vid)
-        if (mod) affectedMods.push(mod)
-      }
-      fileToVids.delete(file)
-
-      if (affectedMods.length === 0) return
-      for (const mod of affectedMods) server.moduleGraph.invalidateModule(mod)
-      return affectedMods
-    },
+    }
   }
 }
 
-/**
- * @deprecated Use pigment() instead.
- */
 export const rustCssPlugin = pigment()
