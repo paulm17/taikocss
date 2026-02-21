@@ -1,123 +1,171 @@
 import { createRequire } from 'module'
 
 const require = createRequire(import.meta.url)
-const { transform } = require('./my-css-engine/index.js') // loads .node binary
+const { transform } = require('./index.js') // loads .node binary
 
-// Maps virtual module ID → { css, map } so both the CSS content and its
-// source map are available when Vite calls load().
+// ---------------------------------------------------------------------------
+// Internal state
+// ---------------------------------------------------------------------------
+
+// Maps virtual module ID → { css, map }
 const cssMap = new Map()
 
-// Maps source file path → Set<virtualModuleId> it produced.
-// Lets handleHotUpdate invalidate only the virtual modules belonging to the
-// file that actually changed, rather than blowing away everything.
+// Maps source file path → Set<virtualModuleId> for targeted HMR invalidation
 const fileToVids = new Map()
 
-export const rustCssPlugin = {
-  name: 'rust-css',
-  enforce: 'pre',
+// ---------------------------------------------------------------------------
+// Colour scheme CSS variable emission
+//
+// Converts a colourScheme entry like:
+//   { obnoxiousBrown: { light: { colors: { bg: '#fff' } }, dark: { colors: { bg: '#000' } } } }
+// into virtual CSS modules containing [data-color-scheme][data-mode] blocks.
+// ---------------------------------------------------------------------------
 
-  transform(code, id) {
-    if (!/\.(t|j)sx?$/.test(id) || id.includes('node_modules')) return
-    if (!code.includes('css(')) return
-
-    let result
-    try {
-      result = transform(id, code)
-    } catch (err) {
-      // The Rust core already embeds "file:line:col: css() — …" in the message.
-      // this.error() surfaces it in the Vite browser overlay and terminal.
-      this.error(err.message)
-    }
-
-    if (!result.cssRules.length) return
-
-    let imports = ''
-    for (const rule of result.cssRules) {
-      const vid = `virtual:css/${rule.hash}.css`
-      if (!cssMap.has(vid)) {          // deduplicate — only import each hash once
-        cssMap.set(vid, { css: rule.css, map: rule.map ?? null })
-        imports += `import "${vid}";\n`
+function buildColorSchemeCSS(schemeName, variants) {
+  const modules = []
+  for (const [mode, tokens] of Object.entries(variants)) {
+    if (!tokens) continue
+    const lines = []
+    for (const [group, values] of Object.entries(tokens)) {
+      for (const [key, value] of Object.entries(values)) {
+        // e.g. colors.background → --colors-background: #f9f9f9
+        lines.push(`  --${group}-${key}: ${value};`)
       }
-      // Track which virtual modules this source file owns so HMR can
-      // invalidate precisely.
-      if (!fileToVids.has(id)) fileToVids.set(id, new Set())
-      fileToVids.get(id).add(vid)
     }
+    const css = `[data-color-scheme="${schemeName}"][data-mode="${mode}"] {\n${lines.join('\n')}\n}`
+    const vid = `virtual:css/theme-${schemeName}-${mode}.css`
+    modules.push({ vid, css })
+  }
+  return modules
+}
 
-    // Pass the JS source map produced by oxc_codegen back to Vite.
-    // Vite will chain it with any upstream maps (e.g. the TypeScript map).
-    return {
-      code: imports + result.code,
-      map: result.map ?? null,
-    }
-  },
+// ---------------------------------------------------------------------------
+// pigment(options) — the main plugin factory (v3)
+// ---------------------------------------------------------------------------
 
-  resolveId(id) {
-    if (id.startsWith('virtual:css/')) return id
-  },
+export function pigment(options = {}) {
+  const theme = options.theme ?? null
+  const themeJson = theme ? JSON.stringify(theme) : null
+  const dir = options.css?.dir ?? 'ltr'
 
-  load(id) {
-    if (!id.startsWith('virtual:css/')) return
-    const entry = cssMap.get(id)
-    if (!entry) return
+  return {
+    name: 'rust-css',
+    enforce: 'pre',
 
-    // Inline the CSS source map as a data URI comment so DevTools can map
-    // minified selectors back to the original object literal in the JS file.
-    if (entry.map) {
-      const b64 = Buffer.from(entry.map).toString('base64')
-      return (
-        entry.css +
-        `\n/*# sourceMappingURL=data:application/json;charset=utf-8;base64,${b64} */`
-      )
-    }
-    return entry.css
-  },
+    // ── Startup: emit colour scheme virtual modules ─────────────────────
+    buildStart() {
+      if (!theme?.colorSchemes) return
+      for (const [schemeName, variants] of Object.entries(theme.colorSchemes)) {
+        for (const { vid, css } of buildColorSchemeCSS(schemeName, variants)) {
+          cssMap.set(vid, { css, map: null })
+        }
+      }
+    },
 
-  // ── HMR ────────────────────────────────────────────────────────────────────
-  //
-  // When a source file is saved in dev mode, Vite calls handleHotUpdate for
-  // that file.  We need to:
-  //
-  //  1. Drop the stale virtual CSS module entries for this file from cssMap
-  //     so the next transform() call re-populates them with fresh content.
-  //  2. Find the corresponding ModuleNode objects in Vite's module graph and
-  //     return them — Vite will then invalidate those modules and push an
-  //     update to the browser.
-  //
-  // Because the virtual CSS modules are real module-graph nodes (Vite
-  // resolved them via resolveId), the browser receives a targeted CSS update
-  // rather than a full page reload in most cases.
-  handleHotUpdate({ file, server }) {
-    const vids = fileToVids.get(file)
-    if (!vids || vids.size === 0) return
+    // ── Transform each JS/TS/JSX/TSX file ──────────────────────────────
+    transform(code, id) {
+      if (!/\.(t|j)sx?$/.test(id) || id.includes('node_modules')) return
+      // Quick bail if there's no recognisable call
+      if (!code.includes('css(') && !code.includes('css`') && !code.includes('globalCss`') && !code.includes('keyframes`')) return
 
-    const affectedMods = []
+      let result
+      try {
+        result = transform(id, code, themeJson, dir)
+      } catch (err) {
+        this.error(err.message)
+      }
 
-    for (const vid of vids) {
-      // Evict the stale CSS so load() will serve fresh content on next hit.
-      cssMap.delete(vid)
+      const hasWork =
+        result.cssRules.length > 0 ||
+        result.globalCss.length > 0 ||
+        result.keyframes.length > 0
 
-      const mod = server.moduleGraph.getModuleById(vid)
-      if (mod) affectedMods.push(mod)
-    }
+      if (!hasWork) return
 
-    // Clear the file → vids mapping; it will be rebuilt by transform().
-    fileToVids.delete(file)
+      // Global CSS imports come first (spec §2.5)
+      let imports = ''
 
-    if (affectedMods.length === 0) return
+      for (const rule of result.globalCss) {
+        const vid = `virtual:css/global-${rule.hash}.css`
+        if (!cssMap.has(vid)) {
+          cssMap.set(vid, { css: rule.css, map: rule.map ?? null })
+          imports += `import "${vid}";\n`
+        }
+        if (!fileToVids.has(id)) fileToVids.set(id, new Set())
+        fileToVids.get(id).add(vid)
+      }
 
-    // Invalidate each virtual module so Vite re-fetches it.
-    for (const mod of affectedMods) {
-      server.moduleGraph.invalidateModule(mod)
-    }
+      for (const rule of result.keyframes) {
+        const vid = `virtual:css/kf-${rule.hash}.css`
+        if (!cssMap.has(vid)) {
+          cssMap.set(vid, { css: rule.css, map: rule.map ?? null })
+          imports += `import "${vid}";\n`
+        }
+        if (!fileToVids.has(id)) fileToVids.set(id, new Set())
+        fileToVids.get(id).add(vid)
+      }
 
-    // Return the affected modules to Vite.  Vite will send targeted
-    // 'css-update' messages to the browser HMR client for each one,
-    // avoiding a full page reload.
-    return affectedMods
+      for (const rule of result.cssRules) {
+        const vid = `virtual:css/${rule.hash}.css`
+        if (!cssMap.has(vid)) {
+          cssMap.set(vid, { css: rule.css, map: rule.map ?? null })
+          imports += `import "${vid}";\n`
+        }
+        if (!fileToVids.has(id)) fileToVids.set(id, new Set())
+        fileToVids.get(id).add(vid)
+      }
+
+      return {
+        code: imports + result.code,
+        map: result.map ?? null,
+      }
+    },
+
+    resolveId(id) {
+      if (id.startsWith('virtual:css/')) return id
+    },
+
+    load(id) {
+      if (!id.startsWith('virtual:css/')) return
+      const entry = cssMap.get(id)
+      if (!entry) return
+
+      if (entry.map) {
+        const b64 = Buffer.from(entry.map).toString('base64')
+        return (
+          entry.css +
+          `\n/*# sourceMappingURL=data:application/json;charset=utf-8;base64,${b64} */`
+        )
+      }
+      return entry.css
+    },
+
+    // ── HMR ──────────────────────────────────────────────────────────────
+    handleHotUpdate({ file, server }) {
+      const vids = fileToVids.get(file)
+      if (!vids || vids.size === 0) return
+
+      const affectedMods = []
+      for (const vid of vids) {
+        cssMap.delete(vid)
+        const mod = server.moduleGraph.getModuleById(vid)
+        if (mod) affectedMods.push(mod)
+      }
+      fileToVids.delete(file)
+
+      if (affectedMods.length === 0) return
+      for (const mod of affectedMods) server.moduleGraph.invalidateModule(mod)
+      return affectedMods
+    },
   }
 }
 
+// ---------------------------------------------------------------------------
+// Backwards-compatible bare plugin export (deprecated in v3)
+// ---------------------------------------------------------------------------
+
+export const rustCssPlugin = pigment()
+
 export default {
-  plugins: [rustCssPlugin]
+  plugins: [pigment()],
 }

@@ -1,4 +1,5 @@
 import type { Plugin } from 'vite'
+import type { Theme }  from './theme'
 
 /**
  * A single CSS rule extracted from a `css({})` call by the Rust transform.
@@ -11,6 +12,26 @@ import type { Plugin } from 'vite'
 export interface ExtractedCssRule {
   hash: string
   css: string
+  map?: string
+}
+
+/**
+ * A global CSS rule extracted from a `globalCss\`...\`` tagged template call.
+ */
+export interface GlobalCssRule {
+  hash: string
+  css: string
+  map?: string
+}
+
+/**
+ * A keyframes rule extracted from a `keyframes\`...\`` tagged template call.
+ */
+export interface KeyframeRule {
+  hash: string
+  name: string
+  css: string
+  map?: string
 }
 
 /**
@@ -24,29 +45,58 @@ export interface ExtractedCssRule {
 export interface TransformResult {
   code: string
   cssRules: ExtractedCssRule[]
+  globalCss: GlobalCssRule[]
+  keyframes: KeyframeRule[]
+  map?: string
+}
+
+
+// ---------------------------------------------------------------------------
+// Plugin options
+// ---------------------------------------------------------------------------
+
+export interface PigmentOptions {
+  /**
+   * The design-token theme passed to `css()` function calls at build time.
+   * Colour scheme entries are emitted as CSS custom-property blocks.
+   */
+  theme?: Theme
+
+  css?: {
+    /**
+     * Text direction for generated CSS.
+     * @default 'ltr'
+     */
+    dir?: 'ltr' | 'rtl'
+  }
 }
 
 /**
- * Zero-runtime CSS-in-JS Vite plugin.
- *
- * Add it to your `vite.config.ts` plugins array:
+ * Zero-runtime CSS-in-JS Vite plugin factory.
  *
  * ```ts
- * import { rustCssPlugin } from 'my-css-engine/vite'
+ * import { defineConfig } from 'vite'
+ * import { pigment }      from 'taikocss/vite'
+ * import { yourTheme }    from './your-theme'
  *
- * export default {
- *   plugins: [rustCssPlugin],
- * }
+ * export default defineConfig({
+ *   plugins: [
+ *     pigment({ theme: yourTheme }),
+ *   ],
+ * })
  * ```
  *
  * The plugin:
  * 1. Intercepts every `.js`, `.ts`, `.jsx`, and `.tsx` file at transform time.
  * 2. Calls the native Rust binary to parse the file with OXC and extract all
- *    static `css({})` calls.
- * 3. Replaces each call with a hashed class name string literal.
- * 4. Registers a virtual CSS module (`virtual:css/<hash>.css`) containing
- *    the minified, browser-targeted CSS produced by LightningCSS.
- * 5. Prepends `import "virtual:css/<hash>.css"` statements to the transformed
- *    source so Vite injects the styles automatically.
+ *    static `css({})`, `globalCss\`...\``, and `keyframes\`...\`` calls.
+ * 3. Resolves theme token references (`theme.colors.primary`) at compile time.
+ * 4. Registers virtual CSS modules and prepends import statements.
+ * 5. Emits colour scheme CSS custom-property blocks on `buildStart`.
+ */
+export declare function pigment(options?: PigmentOptions): Plugin
+
+/**
+ * @deprecated Use `pigment()` instead.
  */
 export declare const rustCssPlugin: Plugin
