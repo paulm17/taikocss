@@ -1,25 +1,61 @@
 {
   "name": "taikocss",
-  "version": "0.1.0",
-  "description": "Zero-runtime CSS-in-JS extraction via Rust + OXC + LightningCSS + Vite",
-  "main": "index.js",
-  "types": "types/css.d.ts",
+  "version": "0.2.0",
+  "description": "Zero-runtime CSS-in-JS extraction via Rust, OXC, and LightningCSS",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paulm17/taikocss.git"
+  },
+  "type": "module",
+  "main": "./index.cjs",
+  "module": "./index.js",
   "exports": {
     ".": {
-      "types": "./types/css.d.ts",
-      "require": "./index.js"
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "require": "./index.cjs"
     },
     "./vite": {
-      "types": "./types/vite.d.ts",
-      "default": "./vite.config.js"
+      "types": "./plugin.d.ts",
+      "import": "./plugin.js",
+      "require": "./plugin.cjs"
+    },
+    "./css": {
+      "types": "./types/css.d.ts",
+      "import": "./src/css.js",
+      "require": "./src/css.cjs"
     }
   },
+  "files": [
+    "index.js",
+    "index.cjs",
+    "index.d.ts",
+    "plugin.js",
+    "plugin.cjs",
+    "plugin.d.ts",
+    "src/css.js",
+    "src/css.cjs",
+    "src/css.d.ts",
+    "types/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
-    "build": "npx --no napi build --platform --release",
-    "build:debug": "npx --no napi build --platform"
+    "build": "napi build --platform --release && npm run build:ts",
+    "build:debug": "napi build --platform && npm run build:ts",
+    "prepublishOnly": "npm run build",
+    "postinstall": "node scripts/check-platform.js",
+    "test": "node test.mjs",
+    "typecheck": "npx tsc --noEmit",
+    "changeset": "changeset",
+    "version": "changeset version && npm install --package-lock-only",
+    "release": "changeset publish",
+    "build:ts": "node scripts/build-shim.js"
   },
   "napi": {
     "binaryName": "taikocss",
+    "packageName": "taikocss/core",
     "targets": [
       "aarch64-apple-darwin",
       "x86_64-apple-darwin",
@@ -28,10 +64,21 @@
       "aarch64-unknown-linux-gnu"
     ]
   },
-  "devDependencies": {
-    "@napi-rs/cli": "^3.5.1"
-  },
   "peerDependencies": {
     "vite": "^4.0.0 || ^5.0.0 || ^6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0",
+    "@napi-rs/cli": "^3.5.1",
+    "typescript": "^5.4.0",
+    "vite": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

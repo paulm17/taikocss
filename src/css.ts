@@ -1,7 +1,28 @@
 // src/css.ts
-// At runtime this is a no-op. The Vite plugin replaces all calls with a
-// static class name string at build time, so this code only runs in
-// environments that don't go through the plugin (tests, SSR without transform).
+//
+// Runtime shim — used by Jest, Vitest (node mode), ts-node, and any other
+// environment that doesn't go through the Vite plugin transform.
+//
+// At build time the Vite plugin replaces every call with a static class-name
+// string and injects virtual CSS modules, so this code is never reached in a
+// production bundle.
+
 export function css(_styles: Record<string, unknown>): string {
   return ''
+}
+
+export function globalCss(
+  _strings: TemplateStringsArray,
+  ..._values: unknown[]
+): void {}
+
+export function keyframes(
+  _strings: TemplateStringsArray,
+  ..._values: unknown[]
+): string {
+  return ''
+}
+
+export function container(..._args: unknown[]): Record<string, unknown> {
+  return {}
 }

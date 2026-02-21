@@ -3,7 +3,7 @@
 A zero-runtime CSS-in-JS library powered by Rust, [OXC](https://oxc.rs), and [LightningCSS](https://lightningcss.dev). Every `css()` call is extracted at **build time** — the browser receives plain, minified, hashed CSS with no JavaScript overhead at runtime.
 
 ```ts
-import { css } from 'taikocss'
+import { css } from 'taikocss/css'
 
 const button = css({
   backgroundColor: 'tomato',
@@ -68,7 +68,7 @@ export default defineConfig({
 
 ```tsx
 // Button.tsx
-import { css } from 'taikocss'
+import { css } from 'taikocss/css'
 
 const styles = css({
   backgroundColor: 'steelblue',
@@ -94,9 +94,19 @@ Styles update instantly on save via HMR — no full page reload for CSS-only cha
 
 ---
 
-## Vite plugin options
+## Entry points
 
-The `pigment()` factory accepts an optional configuration object.
+| Import path | What it provides |
+|---|---|
+| `taikocss/css` | `css()`, `globalCss`, `keyframes`, `container()` — the authoring API |
+| `taikocss/vite` | `pigment()` — the Vite plugin factory |
+| `taikocss` | `transform()` — the raw Rust NAPI function, for advanced use |
+
+Always import your styles from `taikocss/css`. This resolves to a no-op shim in test/SSR environments and is replaced at build time by the Vite plugin — no manual shim creation required.
+
+---
+
+## Vite plugin options
 
 ```ts
 // vite.config.ts
@@ -142,15 +152,15 @@ export default defineConfig({
 Define a CSS class from a static style object. Returns the hashed class name string at build time.
 
 ```ts
-import { css } from 'taikocss'
+import { css } from 'taikocss/css'
 
 const card = css({
   backgroundColor: '#fff',
   borderRadius: 8,
-  padding: 24,                      // numbers → px (except unitless props)
+  padding: 24,        // numbers → px (except unitless props)
   boxShadow: '0 2px 8px #0002',
-  fontWeight: 700,                   // unitless — no px suffix
-  opacity: 1,                        // unitless — no px suffix
+  fontWeight: 700,    // unitless — no px suffix
+  opacity: 1,         // unitless — no px suffix
 })
 ```
 
@@ -191,7 +201,7 @@ const bad = css({ fontSize: size })
 
 ### Defining a theme
 
-Create a theme file and export it. The theme is consumed at build time — it never ships to the browser.
+Create a theme file and pass it to `pigment()`. The theme is consumed entirely at build time — it never ships to the browser.
 
 ```ts
 // src/theme.ts
@@ -207,7 +217,7 @@ export const myTheme: Theme = {
     text:       '#212529',
   },
   spacing: {
-    unit: 8,      // base unit in px — multiply to get larger spacing
+    unit: 8,      // base unit in px — multiply to derive scale steps
   },
   typography: {
     fontFamily: 'Inter, system-ui, sans-serif',
@@ -223,14 +233,14 @@ export const myTheme: Theme = {
 Pass a function to `css()` that receives `{ theme }`:
 
 ```ts
-import { css } from 'taikocss'
+import { css } from 'taikocss/css'
 
 const heading = css(({ theme }) => ({
-  color:       theme.colors.primary,
-  fontFamily:  theme.typography.fontFamily,
-  fontSize:    theme.spacing.unit * 4,      // 8 * 4 = 32 → "32px"
-  lineHeight:  theme.typography.lineHeight,
-  marginBottom: theme.spacing.unit * 2,     // 8 * 2 = 16 → "16px"
+  color:        theme.colors.primary,
+  fontFamily:   theme.typography.fontFamily,
+  fontSize:     theme.spacing.unit * 4,    // 8 * 4 = 32 → "32px"
+  lineHeight:   theme.typography.lineHeight,
+  marginBottom: theme.spacing.unit * 2,    // 8 * 2 = 16 → "16px"
 }))
 
 const card = css(({ theme }) => ({
@@ -279,35 +289,20 @@ export const myTheme: Theme = {
   // ...base tokens above...
 
   colorSchemes: {
-    // A branded colour scheme with light and dark variants
     obnoxiousBrown: {
       light: {
-        colors: {
-          background: '#f9f9f9',
-          foreground: '#121212',
-        },
+        colors: { background: '#f9f9f9', foreground: '#121212' },
       },
       dark: {
-        colors: {
-          background: '#212121',
-          foreground: '#ffffff',
-        },
+        colors: { background: '#212121', foreground: '#ffffff' },
       },
     },
-
-    // Another scheme
     oceanBlue: {
       light: {
-        colors: {
-          background: '#e8f4f8',
-          foreground: '#0d2d3d',
-        },
+        colors: { background: '#e8f4f8', foreground: '#0d2d3d' },
       },
       dark: {
-        colors: {
-          background: '#0d2d3d',
-          foreground: '#e8f4f8',
-        },
+        colors: { background: '#0d2d3d', foreground: '#e8f4f8' },
       },
     },
   },
@@ -346,7 +341,6 @@ function setColorScheme(scheme: string, mode: 'light' | 'dark') {
   document.documentElement.dataset.mode = mode
 }
 
-// Switch to dark mode
 setColorScheme('obnoxiousBrown', 'dark')
 ```
 
@@ -358,7 +352,7 @@ Use `globalCss` to inject page-level CSS — resets, base typography, font-face 
 
 ```ts
 // src/globals.ts
-import { globalCss } from 'taikocss'
+import { globalCss } from 'taikocss/css'
 
 globalCss`
   *, *::before, *::after {
@@ -378,13 +372,6 @@ globalCss`
     max-width: 100%;
     display: block;
   }
-
-  h1, h2, h3, h4, h5, h6 {
-    margin-top: 0;
-    margin-bottom: 0.5rem;
-    font-weight: 700;
-    line-height: 1.2;
-  }
 `
 ```
 
@@ -399,10 +386,10 @@ import { App } from './App'
 createRoot(document.getElementById('root')!).render(<App />)
 ```
 
-**Theme tokens can be interpolated** as long as they are statically resolvable:
+**Static values can be interpolated:**
 
 ```ts
-import { globalCss } from 'taikocss'
+import { globalCss } from 'taikocss/css'
 import { myTheme } from './theme'
 
 globalCss`
@@ -417,7 +404,7 @@ globalCss`
 `
 ```
 
-`globalCss` processes its template through the same LightningCSS pipeline as `css()` — the output is minified, vendor-prefixed, and syntax-lowered for your browser targets.
+`globalCss` processes its template through the same LightningCSS pipeline as `css()` — minified, vendor-prefixed, and syntax-lowered. Global CSS modules are always injected before component-level CSS modules in the output.
 
 ---
 
@@ -426,7 +413,7 @@ globalCss`
 Use `keyframes` to define `@keyframes` animations at build time. The return value is the hashed animation name string, which you can use anywhere an animation name is expected.
 
 ```ts
-import { keyframes, css } from 'taikocss'
+import { keyframes, css } from 'taikocss/css'
 
 const fadeIn = keyframes`
   from { opacity: 0; }
@@ -453,7 +440,7 @@ const pulse = keyframes`
 Use the animation name in a `css()` call or a `style` prop:
 
 ```tsx
-// In a css() call — keyframes must be declared before css() in the same file
+// keyframes must be declared before any css() call that references them
 const modal = css({
   animation: `${fadeIn} 200ms ease-out`,
 })
@@ -462,7 +449,6 @@ const card = css({
   animation: `${slideUp} 300ms cubic-bezier(0.16, 1, 0.3, 1)`,
 })
 
-// In a style prop
 function Spinner() {
   return (
     <div style={{ animation: `${pulse} 1.5s ease-in-out infinite` }}>
@@ -472,7 +458,7 @@ function Spinner() {
 }
 ```
 
-At build time, `fadeIn` becomes `"kf_a3f9b2c1"` — a stable, content-hashed animation name. Two identical `keyframes` bodies in different files produce the same name and a single CSS `@keyframes` declaration.
+At build time, `fadeIn` becomes `"kf_a3f9b2c1"` — a stable, content-hashed animation name. Two identical `keyframes` bodies in different files produce the same name and a single CSS `@keyframes` declaration in the bundle.
 
 **Ordering rule:** `keyframes` declarations must appear before any `css()` call that references them within the same file.
 
@@ -485,12 +471,11 @@ At build time, `fadeIn` becomes `"kf_a3f9b2c1"` — a stable, content-hashed ani
 `@container` rules work exactly like `@media` rules — use them as nested object keys inside `css()`:
 
 ```ts
-import { css } from 'taikocss'
+import { css } from 'taikocss/css'
 
 const articleBody = css({
   fontSize: '1rem',
 
-  // Responds to the viewport (standard media query)
   '@media (min-width: 768px)': {
     fontSize: '1.125rem',
   },
@@ -510,28 +495,27 @@ const articleBody = css({
 
 ### Declaring a containment context
 
-Use the `container()` helper inside a `css()` call to declare a named containment context. It expands at build time — no runtime overhead.
+Use the `container()` helper inside a `css()` call to declare a named containment context. It expands at build time — zero runtime overhead.
 
 ```ts
-import { css, container } from 'taikocss'
+import { css, container } from 'taikocss/css'
 
-// Unnamed containment context (any @container query can match)
+// Unnamed containment context
 const wrapper = css({
   ...container('inline-size'),
   width: '100%',
 })
 
-// Named containment context (only @container sidebar … queries match)
+// Named containment context
 const sidebarEl = css({
   ...container('sidebar', 'inline-size'),
   width: '280px',
   flexShrink: 0,
 })
 
-// Then in child components, query the named container:
+// Child components query the named container:
 const navItem = css({
   padding: '8px 16px',
-
   '@container sidebar (max-width: 200px)': {
     padding: '4px 8px',
     fontSize: '0.875rem',
@@ -578,7 +562,7 @@ const layout = css({
 
 ## RTL / bidirectional support
 
-When your application serves both LTR and RTL locales, set `generateForBothDir: true` in the plugin options. The engine will emit two CSS modules for every rule — one for each direction — and inject both imports into the transformed JS. The active direction is determined by the `dir` attribute on `<html>` or any ancestor element — no JavaScript switching code is needed.
+When your application serves both LTR and RTL locales, set `generateForBothDir: true` in the plugin options. The engine emits two CSS modules for every rule — one for each direction — and injects both imports into the transformed JS. The active direction is determined by the `dir` attribute on `<html>` or any ancestor element — no JavaScript switching code is needed.
 
 ```ts
 // vite.config.ts
@@ -595,7 +579,7 @@ Write your styles using CSS logical properties for best results:
 
 ```ts
 const panel = css({
-  marginInlineStart: 16,    // left in LTR, right in RTL
+  marginInlineStart: 16,   // left in LTR, right in RTL
   paddingInline: 24,
   borderInlineStart: '3px solid tomato',
 })
@@ -605,24 +589,41 @@ const panel = css({
 
 ## Runtime shim (for Jest / Vitest / ts-node)
 
-When running tests or scripts that don't go through the Vite transform, `css()` calls need to return something without crashing. The package includes a no-op shim for this purpose.
-
-Create `src/css.ts` in your project:
+The package includes a no-op shim at `taikocss/css` for environments that don't go through the Vite transform. All four functions are exported and return safe empty values — components won't crash, they just won't have styles.
 
 ```ts
-// src/css.ts
-// No-op shim for untransformed environments (Jest, Vitest node mode, ts-node).
-// The Vite plugin replaces all css() calls with static class name strings
-// before this code ever runs in a real browser.
-export function css(_styles: Record<string, unknown>): string {
-  return ''
+// Import from taikocss/css everywhere — the right implementation is resolved automatically:
+// - Vite build/dev:  the Vite plugin transforms calls to static class names
+// - Jest / ts-node:  the no-op shim returns '' for css() and keyframes(), {} for container()
+
+import { css, globalCss, keyframes, container } from 'taikocss/css'
+```
+
+No `moduleNameMapper` path hacks are needed — the `"./css"` export in `package.json` resolves correctly through Node's exports map in all environments.
+
+### Jest configuration
+
+```js
+// jest.config.js
+module.exports = {
+  testEnvironment: 'jsdom',
+  moduleNameMapper: {
+    '^taikocss/css$': 'taikocss/css',   // resolves via exports map automatically
+  },
 }
 ```
 
-Import from your own shim file in components:
+### Vitest configuration
 
 ```ts
-import { css } from '../css'   // → the shim in tests, replaced by the engine in builds
+// vitest.config.ts
+import { defineConfig } from 'vitest/config'
+import { pigment } from 'taikocss/vite'
+
+export default defineConfig({
+  plugins: [pigment()],
+  test: { environment: 'jsdom' },
+})
 ```
 
 ---
@@ -651,69 +652,9 @@ const styles: CSSProperties = {
 
 ## Testing
 
-### Unit tests — Vitest (recommended)
-
-Configure Vitest to use the Vite plugin so that `css()` calls are transformed before your component tests run:
-
-```ts
-// vitest.config.ts
-import { defineConfig } from 'vitest/config'
-import { pigment } from 'taikocss/vite'
-import { myTheme } from './src/theme'
-
-export default defineConfig({
-  plugins: [pigment({ theme: myTheme })],
-  test: {
-    environment: 'jsdom',
-  },
-})
-```
-
-Write tests as normal — the class name returned by `css()` is stable and content-hashed, so you can assert on it:
-
-```ts
-// Button.test.ts
-import { render } from '@testing-library/react'
-import { Button } from './Button'
-
-test('applies the correct class name', () => {
-  const { container } = render(<Button>Click me</Button>)
-  const btn = container.querySelector('button')!
-
-  // Class names are stable — same input always produces the same hash
-  expect(btn.className).toMatch(/^cls_[a-f0-9]{8}$/)
-})
-
-test('class name is consistent between test runs', () => {
-  const { container: c1 } = render(<Button>A</Button>)
-  const { container: c2 } = render(<Button>B</Button>)
-
-  // Same component = same styles = same hash
-  expect(c1.querySelector('button')!.className)
-    .toBe(c2.querySelector('button')!.className)
-})
-```
-
-### Unit tests — Jest
-
-In Jest, the Vite transform does not run. Add a module name mapper to redirect `css()` imports to the no-op shim:
-
-```js
-// jest.config.js
-module.exports = {
-  testEnvironment: 'jsdom',
-  moduleNameMapper: {
-    // Redirect the engine's css import to the no-op shim
-    '^taikocss$': '<rootDir>/src/css.ts',
-  },
-}
-```
-
-Components will render without styles — class names will be `""` — but the components themselves won't crash. This is the right behaviour for logic-focused unit tests.
-
 ### Testing the transform directly
 
-You can call the native `transform()` function directly in tests to assert on the CSS output:
+Call the native `transform()` function to assert on CSS output:
 
 ```ts
 // transform.test.ts
@@ -724,18 +665,9 @@ test('extracts a css() call', () => {
     'test.tsx',
     `const btn = css({ color: 'red', padding: 8 })`
   )
-
-  // JS: the call is replaced with a class name string
   expect(code).toMatch(/"cls_[a-f0-9]{8}"/)
-  expect(code).not.toContain('css({')
-
-  // CSS: correct declarations, minified
-  expect(cssRules).toHaveLength(1)
   expect(cssRules[0].css).toContain('color:red')
   expect(cssRules[0].css).toContain('padding:8px')
-
-  // Hash is stable
-  expect(cssRules[0].hash).toHaveLength(8)
 })
 
 test('resolves theme tokens', () => {
@@ -743,21 +675,13 @@ test('resolves theme tokens', () => {
     colors: { primary: 'tomato' },
     spacing: { unit: 8 },
   })
-
   const { cssRules } = transform(
     'test.tsx',
     `const btn = css(({ theme }) => ({ color: theme.colors.primary, padding: theme.spacing.unit * 2 }))`,
     themeJson
   )
-
   expect(cssRules[0].css).toContain('color:tomato')
   expect(cssRules[0].css).toContain('padding:16px')
-})
-
-test('throws a rich error for dynamic values', () => {
-  expect(() =>
-    transform('src/Comp.tsx', `const x = css({ color: someVar })`)
-  ).toThrow(/src\/Comp\.tsx:\d+:\d+/)
 })
 
 test('keyframes produces a hashed name', () => {
@@ -765,29 +689,27 @@ test('keyframes produces a hashed name', () => {
     'test.tsx',
     'const fadeIn = keyframes`from { opacity: 0 } to { opacity: 1 }`'
   )
-
   expect(code).toMatch(/"kf_[a-f0-9]{8}"/)
-  expect(keyframes).toHaveLength(1)
   expect(keyframes[0].css).toContain('@keyframes')
 })
 
 test('globalCss emits a global rule', () => {
-  const { globalCss } = transform(
-    'test.tsx',
-    'globalCss`body { margin: 0 }`'
-  )
-
-  expect(globalCss).toHaveLength(1)
-  expect(globalCss[0].css).toContain('body')
+  const { globalCss } = transform('test.tsx', 'globalCss`body { margin: 0 }`')
   expect(globalCss[0].css).toContain('margin:0')
+})
+
+test('throws a rich error for dynamic values', () => {
+  expect(() =>
+    transform('src/Comp.tsx', `const x = css({ color: someVar })`)
+  ).toThrow(/src\/Comp\.tsx:\d+:\d+/)
 })
 ```
 
 ### Running the test suite
 
 ```bash
-# Run the built-in test suite (tests the native Rust binary directly)
-node test.mjs
+# Built-in test suite (tests the native binary directly)
+npm test
 
 # With Vitest
 npx vitest run
@@ -801,11 +723,14 @@ npx jest
 ## Build
 
 ```bash
-# Production build (optimised native binary)
+# Production build — native binary + TypeScript shim
 npm run build
 
-# Debug build (faster compile, includes debug symbols)
+# Debug build — faster compile, includes debug symbols
 npm run build:debug
+
+# TypeScript shim only (no Rust recompile)
+npm run build:ts
 ```
 
 ---
@@ -814,11 +739,11 @@ npm run build:debug
 
 Class names follow the pattern `cls_<hash>` where `<hash>` is an 8-character FNV-1a hex digest of the raw CSS content (before minification). This means:
 
-- **Same input → same output.** Two components that define the exact same styles will share a class name and a single CSS declaration in the bundle.
+- **Same input → same output.** Two components that define the exact same styles share a class name and a single CSS declaration in the bundle.
 - **Content-addressed, not filename-addressed.** Renaming or moving a file does not change existing class names. Refactors don't break cached CSS.
 - **No collisions in practice.** FNV-1a over the full CSS string; the probability of an 8-hex-digit collision across a typical component library is negligible.
 
-Keyframe animation names follow `kf_<hash>` by the same rule.
+Keyframe animation names follow the same pattern: `kf_<hash>`.
 
 ---
 
@@ -832,16 +757,39 @@ Source maps are inlined as base64 data URIs in the virtual CSS modules — no `.
 
 ## Browser support
 
-LightningCSS targets Chrome 105+, Safari 16+, and Firefox 110+ by default. Features not natively supported by these targets (e.g. older syntax) are automatically lowered or vendor-prefixed. To adjust targets, open a GitHub issue — configurable targets are on the roadmap.
+LightningCSS targets Chrome 105+, Safari 16+, and Firefox 110+ by default. Features not natively supported by these targets are automatically lowered or vendor-prefixed. Container queries are natively supported by all three target browsers and pass through without modification.
 
 ---
 
 ## Limitations
 
-- All `css()`, `globalCss`, `keyframes`, and `container()` arguments must be **statically resolvable at build time**. Runtime variables, imports from other modules, and conditional expressions are not supported and will produce a build error with a precise file/line/column message.
-- The `css()` function argument form (`css(({ theme }) => …)`) currently supports member access and the four arithmetic operators. Template literals with complex expressions are not supported.
+- All `css()`, `globalCss`, `keyframes`, and `container()` arguments must be **statically resolvable at build time**. Runtime variables, imports from other modules, and conditional expressions are build errors with precise file/line/column messages.
+- The theme function form (`css(({ theme }) => …)`) supports member access and the four arithmetic operators. Complex expressions (ternary, function calls, loops) are not supported.
 - Spread properties (`...obj`) inside `css()` objects are not supported, except for the `container()` helper which is specially handled.
 - Server-side rendering without Vite (e.g. Next.js, Remix) is not yet supported. The runtime shim will keep components from crashing but styles will not be injected.
+
+---
+
+## Local development
+
+```bash
+# In the taikocss repo
+npm run build
+npm link
+
+# In your project
+npm link taikocss
+```
+
+Or reference it directly in your project's `package.json`:
+
+```json
+{
+  "dependencies": {
+    "taikocss": "file:../path/to/taikocss"
+  }
+}
+```
 
 ---
 

@@ -1,6 +1,6 @@
 [package]
-name = "my-css-engine"
-version = "0.1.0"
+name = "taikocss"
+version = "0.2.0"
 edition = "2021"
 
 [lib]

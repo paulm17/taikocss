@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [
+    [
+      "taikocss",
+      "@taikocss/core-darwin-arm64",
+      "@taikocss/core-darwin-x64",
+      "@taikocss/core-linux-x64-gnu",
+      "@taikocss/core-linux-arm64-gnu",
+      "@taikocss/core-win32-x64-msvc"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": []
+}

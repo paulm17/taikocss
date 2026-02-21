@@ -1,0 +1,18 @@
+// src/css.ts
+//
+// Runtime shim — used by Jest, Vitest (node mode), ts-node, and any other
+// environment that doesn't go through the Vite plugin transform.
+//
+// At build time the Vite plugin replaces every call with a static class-name
+// string and injects virtual CSS modules, so this code is never reached in a
+// production bundle.
+export function css(_styles) {
+    return '';
+}
+export function globalCss(_strings, ..._values) { }
+export function keyframes(_strings, ..._values) {
+    return '';
+}
+export function container(..._args) {
+    return {};
+}
