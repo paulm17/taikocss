@@ -1,9 +1,9 @@
-# my-css-engine
+# taikocss
 
 A zero-runtime CSS-in-JS library powered by Rust, [OXC](https://oxc.rs), and [LightningCSS](https://lightningcss.dev). Every `css()` call is extracted at **build time** — the browser receives plain, minified, hashed CSS with no JavaScript overhead at runtime.
 
 ```ts
-import { css } from 'my-css-engine'
+import { css } from 'taikocss'
 
 const button = css({
   backgroundColor: 'tomato',
@@ -39,11 +39,11 @@ Nothing runs in the browser except the styles themselves.
 ## Installation
 
 ```bash
-npm install my-css-engine
+npm install taikocss
 # or
-pnpm add my-css-engine
+pnpm add taikocss
 # or
-yarn add my-css-engine
+yarn add taikocss
 ```
 
 No Rust toolchain is required — the native binary ships prebuilt for all supported platforms.
@@ -57,7 +57,7 @@ No Rust toolchain is required — the native binary ships prebuilt for all suppo
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
-import { pigment } from 'my-css-engine/vite'
+import { pigment } from 'taikocss/vite'
 
 export default defineConfig({
   plugins: [pigment()],
@@ -68,7 +68,7 @@ export default defineConfig({
 
 ```tsx
 // Button.tsx
-import { css } from 'my-css-engine'
+import { css } from 'taikocss'
 
 const styles = css({
   backgroundColor: 'steelblue',
@@ -101,7 +101,7 @@ The `pigment()` factory accepts an optional configuration object.
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
-import { pigment } from 'my-css-engine/vite'
+import { pigment } from 'taikocss/vite'
 import { myTheme } from './src/theme'
 
 export default defineConfig({
@@ -142,7 +142,7 @@ export default defineConfig({
 Define a CSS class from a static style object. Returns the hashed class name string at build time.
 
 ```ts
-import { css } from 'my-css-engine'
+import { css } from 'taikocss'
 
 const card = css({
   backgroundColor: '#fff',
@@ -195,7 +195,7 @@ Create a theme file and export it. The theme is consumed at build time — it ne
 
 ```ts
 // src/theme.ts
-import type { Theme } from 'my-css-engine'
+import type { Theme } from 'taikocss'
 
 export const myTheme: Theme = {
   colors: {
@@ -223,7 +223,7 @@ export const myTheme: Theme = {
 Pass a function to `css()` that receives `{ theme }`:
 
 ```ts
-import { css } from 'my-css-engine'
+import { css } from 'taikocss'
 
 const heading = css(({ theme }) => ({
   color:       theme.colors.primary,
@@ -358,7 +358,7 @@ Use `globalCss` to inject page-level CSS — resets, base typography, font-face 
 
 ```ts
 // src/globals.ts
-import { globalCss } from 'my-css-engine'
+import { globalCss } from 'taikocss'
 
 globalCss`
   *, *::before, *::after {
@@ -402,7 +402,7 @@ createRoot(document.getElementById('root')!).render(<App />)
 **Theme tokens can be interpolated** as long as they are statically resolvable:
 
 ```ts
-import { globalCss } from 'my-css-engine'
+import { globalCss } from 'taikocss'
 import { myTheme } from './theme'
 
 globalCss`
@@ -426,7 +426,7 @@ globalCss`
 Use `keyframes` to define `@keyframes` animations at build time. The return value is the hashed animation name string, which you can use anywhere an animation name is expected.
 
 ```ts
-import { keyframes, css } from 'my-css-engine'
+import { keyframes, css } from 'taikocss'
 
 const fadeIn = keyframes`
   from { opacity: 0; }
@@ -485,7 +485,7 @@ At build time, `fadeIn` becomes `"kf_a3f9b2c1"` — a stable, content-hashed ani
 `@container` rules work exactly like `@media` rules — use them as nested object keys inside `css()`:
 
 ```ts
-import { css } from 'my-css-engine'
+import { css } from 'taikocss'
 
 const articleBody = css({
   fontSize: '1rem',
@@ -513,7 +513,7 @@ const articleBody = css({
 Use the `container()` helper inside a `css()` call to declare a named containment context. It expands at build time — no runtime overhead.
 
 ```ts
-import { css, container } from 'my-css-engine'
+import { css, container } from 'taikocss'
 
 // Unnamed containment context (any @container query can match)
 const wrapper = css({
@@ -632,7 +632,7 @@ import { css } from '../css'   // → the shim in tests, replaced by the engine 
 The package ships full TypeScript declarations. No `@types` package is needed.
 
 ```ts
-import type { Theme, CSSProperties } from 'my-css-engine'
+import type { Theme, CSSProperties } from 'taikocss'
 
 // Theme is fully typed — autocomplete works for all token paths
 const myTheme: Theme = {
@@ -658,7 +658,7 @@ Configure Vitest to use the Vite plugin so that `css()` calls are transformed be
 ```ts
 // vitest.config.ts
 import { defineConfig } from 'vitest/config'
-import { pigment } from 'my-css-engine/vite'
+import { pigment } from 'taikocss/vite'
 import { myTheme } from './src/theme'
 
 export default defineConfig({
@@ -704,7 +704,7 @@ module.exports = {
   testEnvironment: 'jsdom',
   moduleNameMapper: {
     // Redirect the engine's css import to the no-op shim
-    '^my-css-engine$': '<rootDir>/src/css.ts',
+    '^taikocss$': '<rootDir>/src/css.ts',
   },
 }
 ```
@@ -717,7 +717,7 @@ You can call the native `transform()` function directly in tests to assert on th
 
 ```ts
 // transform.test.ts
-import { transform } from 'my-css-engine'
+import { transform } from 'taikocss'
 
 test('extracts a css() call', () => {
   const { code, cssRules } = transform(
