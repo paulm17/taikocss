@@ -1,0 +1,37 @@
+{
+  "name": "taikocss",
+  "version": "0.1.0",
+  "description": "Zero-runtime CSS-in-JS extraction via Rust + OXC + LightningCSS + Vite",
+  "main": "index.js",
+  "types": "types/css.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/css.d.ts",
+      "require": "./index.js"
+    },
+    "./vite": {
+      "types": "./types/vite.d.ts",
+      "default": "./vite.config.js"
+    }
+  },
+  "scripts": {
+    "build": "npx --no napi build --platform --release",
+    "build:debug": "npx --no napi build --platform"
+  },
+  "napi": {
+    "binaryName": "taikocss",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu"
+    ]
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.5.1"
+  },
+  "peerDependencies": {
+    "vite": "^4.0.0 || ^5.0.0 || ^6.0.0"
+  }
+}

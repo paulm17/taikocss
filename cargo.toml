@@ -1,0 +1,28 @@
+[package]
+name = "taikocss"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi        = { version = "3.8.3", features = ["napi4"] }
+napi-derive = "3.5.2"
+
+# OXC — JavaScript parsing
+oxc_allocator = "0.114.0"
+oxc_parser    = "0.114.0"
+oxc_span      = "0.114.0"
+oxc_ast       = "0.114.0"
+oxc_codegen   = "0.114.0"
+
+# LightningCSS — CSS processing
+lightningcss = "1.0.0-alpha.70"
+
+# Source maps — used by LightningCSS for CSS source map generation.
+# The version must match what lightningcss depends on; alpha.70 uses 0.6.x.
+parcel_sourcemap = "2.1.1"
+
+[build-dependencies]
+napi-build = "2"

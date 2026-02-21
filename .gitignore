@@ -1,0 +1,29 @@
+# --- System Files ---
+.DS_Store
+Thumbs.db
+
+# --- Node.js / NPM ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.local
+
+# --- Rust / Cargo ---
+# The target directory is where all the heavy compilation happens
+target/
+# If you ever use cargo-expand or other tools that generate temp files
+**/*.rs.bk
+
+# --- Build Outputs ---
+# This matches the specific binary in your directory
+*.node
+dist/
+build/
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
