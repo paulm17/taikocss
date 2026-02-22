@@ -1,7 +1,7 @@
 /**
  * Design-token theme shape for taikocss.
  *
- * Pass an instance of this object to `pigment({ theme })` in your
+ * Pass an instance of this object to `taiko({ theme })` in your
  * `vite.config.ts`. The values are resolved at build time and baked into
  * the generated CSS — no runtime cost.
  */

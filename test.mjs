@@ -8,12 +8,26 @@ const { transform } = require('./loader.cjs')
 
 let passed = 0
 let failed = 0
+const pending = []
 
 function test(name, fn) {
   try {
-    fn()
-    console.log(`  ✓ ${name}`)
-    passed++
+    const result = fn()
+    if (result && typeof result.then === 'function') {
+      pending.push(
+        result.then(() => {
+          console.log(`  ✓ ${name}`)
+          passed++
+        }).catch((e) => {
+          console.error(`  ✗ ${name}`)
+          console.error(`    ${e.message}`)
+          failed++
+        })
+      )
+    } else {
+      console.log(`  ✓ ${name}`)
+      passed++
+    }
   } catch (e) {
     console.error(`  ✗ ${name}`)
     console.error(`    ${e.message}`)
@@ -382,7 +396,7 @@ test('theme addition of two numbers', () => {
   assert(cssRules[0].css.includes('10px'), `expected 10px (8+2), got: ${cssRules[0].css}`)
 })
 
-test('theme without pigment — theme reference errors clearly', () => {
+test('theme without taiko — theme reference errors clearly', () => {
   const src = `const x = css(({ theme }) => ({ color: theme.colors.primary }))`
   assertThrows(
     () => transform('test.jsx', src, null),
@@ -532,29 +546,29 @@ test('transform from loader.cjs produces a valid result', () => {
 
 console.log('\n── v4: plugin.js ──────────────────────────────────────────────')
 
-test('pigment() returns a plugin object with the required hooks', async () => {
-  const { pigment } = await import('./plugin.js')
-  const plugin = pigment()
-  assert(typeof plugin.name === 'string',              'plugin.name should be a string')
-  assert(plugin.enforce === 'pre',                     'plugin.enforce should be "pre"')
-  assert(typeof plugin.transform === 'function',       'plugin.transform should be a function')
-  assert(typeof plugin.resolveId === 'function',       'plugin.resolveId should be a function')
-  assert(typeof plugin.load === 'function',            'plugin.load should be a function')
+test('taiko() returns a plugin object with the required hooks', async () => {
+  const { taiko } = await import('./plugin.js')
+  const plugin = taiko()
+  assert(typeof plugin.name === 'string', 'plugin.name should be a string')
+  assert(plugin.enforce === 'pre', 'plugin.enforce should be "pre"')
+  assert(typeof plugin.transform === 'function', 'plugin.transform should be a function')
+  assert(typeof plugin.resolveId === 'function', 'plugin.resolveId should be a function')
+  assert(typeof plugin.load === 'function', 'plugin.load should be a function')
   assert(typeof plugin.handleHotUpdate === 'function', 'plugin.handleHotUpdate should be a function')
-  assert(typeof plugin.buildStart === 'function',      'plugin.buildStart should be a function')
+  assert(typeof plugin.buildStart === 'function', 'plugin.buildStart should be a function')
 })
 
-test('pigment() with no arguments does not throw', async () => {
-  const { pigment } = await import('./plugin.js')
+test('taiko() with no arguments does not throw', async () => {
+  const { taiko } = await import('./plugin.js')
   let threw = false
-  try { pigment() } catch { threw = true }
-  assert(!threw, 'pigment() with no args should not throw')
+  try { taiko() } catch { threw = true }
+  assert(!threw, 'taiko() with no args should not throw')
 })
 
-test('pigment({ theme }) passes theme through to transform — colour resolved in output', async () => {
-  const { pigment } = await import('./plugin.js')
+test('taiko({ theme }) passes theme through to transform — colour resolved in output', async () => {
+  const { taiko } = await import('./plugin.js')
   const theme = { colors: { primary: 'tomato' } }
-  const plugin = pigment({ theme })
+  const plugin = taiko({ theme })
   const src = `const x = css(({ theme }) => ({ color: theme.colors.primary }))`
   // Call the transform hook directly (simulate Vite)
   const result = plugin.transform(src, 'test.jsx')
@@ -567,7 +581,7 @@ test('pigment({ theme }) passes theme through to transform — colour resolved i
 test('rustCssPlugin export is a valid plugin object', async () => {
   const { rustCssPlugin } = await import('./plugin.js')
   assert(typeof rustCssPlugin === 'object' && rustCssPlugin !== null, 'rustCssPlugin should be an object')
-  assert(typeof rustCssPlugin.name === 'string',        'rustCssPlugin.name should be a string')
+  assert(typeof rustCssPlugin.name === 'string', 'rustCssPlugin.name should be a string')
   assert(typeof rustCssPlugin.transform === 'function', 'rustCssPlugin.transform should be a function')
 })
 
@@ -589,11 +603,11 @@ test('src/css.ts shim — css() returns an empty string', async () => {
       return
     }
   }
-  assert(typeof cssShim.css === 'function',        'css should be a function')
-  assert(cssShim.css({ color: 'red' }) === '',     'css() shim should return ""')
-  assert(typeof cssShim.globalCss === 'function',  'globalCss should be a function')
-  assert(typeof cssShim.keyframes === 'function',  'keyframes should be a function')
-  assert(typeof cssShim.container === 'function',  'container should be a function')
+  assert(typeof cssShim.css === 'function', 'css should be a function')
+  assert(cssShim.css({ color: 'red' }) === '', 'css() shim should return ""')
+  assert(typeof cssShim.globalCss === 'function', 'globalCss should be a function')
+  assert(typeof cssShim.keyframes === 'function', 'keyframes should be a function')
+  assert(typeof cssShim.container === 'function', 'container should be a function')
   assert(cssShim.keyframes`from{opacity:0}to{opacity:1}` === '', 'keyframes shim should return ""')
   const containerResult = cssShim.container('sidebar', 'inline-size')
   assert(typeof containerResult === 'object', 'container() shim should return an object')
@@ -627,8 +641,176 @@ test('check-platform.js never throws on an unknown platform (env override)', () 
   assert(exitCode === 0, `check-platform.js should never exit non-zero, got ${exitCode}`)
 })
 
+// ─── v5: Runtime style overrides ────────────────────────────────────────────
+
+console.log('\n── v5: Runtime — runtimeCss ────────────────────────────────────')
+
+let runtimeMod
+try {
+  runtimeMod = await import('./src/runtime.ts')
+} catch {
+  try {
+    runtimeMod = await import('./src/runtime.js')
+  } catch {
+    console.log('    (skipped — runtime module not compiled yet; run npm run build:ts first)')
+  }
+}
+
+if (runtimeMod) {
+  const { runtimeCss, runtimeGlobalCss, cx, _serializeCSS } = runtimeMod
+
+  test('runtimeCss returns a class name matching stx_[a-f0-9]{8}', () => {
+    const cls = runtimeCss({ color: 'red' })
+    assert(/^stx_[a-f0-9]{8}$/.test(cls), `expected stx_<hash>, got: ${cls}`)
+  })
+
+  test('runtimeCss — camelCase → kebab-case', () => {
+    const css = _serializeCSS('test', { backgroundColor: 'blue' })
+    assert(css.includes('background-color'), `expected background-color, got: ${css}`)
+  })
+
+  test('runtimeCss — number value gets px suffix', () => {
+    const css = _serializeCSS('test', { padding: 16 })
+    assert(css.includes('padding:16px'), `expected padding:16px, got: ${css}`)
+  })
+
+  test('runtimeCss — unitless opacity gets no px', () => {
+    const css = _serializeCSS('test', { opacity: 0.5 })
+    assert(!css.includes('px'), `expected no px, got: ${css}`)
+    assert(css.includes('0.5'), `expected 0.5, got: ${css}`)
+  })
+
+  test('runtimeCss — unitless fontWeight gets no px', () => {
+    const css = _serializeCSS('test', { fontWeight: 700 })
+    assert(!css.includes('px'), `expected no px, got: ${css}`)
+    assert(css.includes('700'), `expected 700, got: ${css}`)
+  })
+
+  test('runtimeCss — zero value gets no px', () => {
+    const css = _serializeCSS('test', { margin: 0 })
+    assert(css.includes('margin:0'), `expected margin:0, got: ${css}`)
+    assert(!css.includes('0px'), `expected no 0px, got: ${css}`)
+  })
+
+  test('runtimeCss — float gets px suffix', () => {
+    const css = _serializeCSS('test', { letterSpacing: 1.5 })
+    assert(css.includes('1.5px'), `expected 1.5px, got: ${css}`)
+  })
+
+  test('runtimeCss — string value passes through', () => {
+    const css = _serializeCSS('test', { color: 'red' })
+    assert(css.includes('color:red'), `expected color:red, got: ${css}`)
+  })
+
+  test('runtimeCss — &:hover nesting', () => {
+    const css = _serializeCSS('test', {
+      color: 'red',
+      '&:hover': { color: 'blue' },
+    })
+    assert(css.includes(':hover'), `expected :hover, got: ${css}`)
+    assert(css.includes('color:blue'), `expected color:blue, got: ${css}`)
+  })
+
+  test('runtimeCss — @media query', () => {
+    const css = _serializeCSS('test', {
+      padding: 16,
+      '@media (max-width: 600px)': { padding: 8 },
+    })
+    assert(css.includes('@media'), `expected @media, got: ${css}`)
+    assert(css.includes('8px'), `expected 8px, got: ${css}`)
+  })
+
+  test('runtimeCss — @container query', () => {
+    const css = _serializeCSS('test', {
+      '@container (min-width: 400px)': { display: 'flex' },
+    })
+    assert(css.includes('@container'), `expected @container, got: ${css}`)
+    assert(css.includes('display:flex'), `expected display:flex, got: ${css}`)
+  })
+
+  test('runtimeCss — same input produces same class name', () => {
+    const a = runtimeCss({ color: 'tomato', padding: 8 })
+    const b = runtimeCss({ color: 'tomato', padding: 8 })
+    assert(a === b, `expected same class name, got: ${a} vs ${b}`)
+  })
+
+  test('runtimeCss — different input produces different class name', () => {
+    const a = runtimeCss({ color: 'tomato' })
+    const b = runtimeCss({ color: 'cyan' })
+    assert(a !== b, `expected different class names, got: ${a} vs ${b}`)
+  })
+
+  test('runtimeCss — deeply nested selectors', () => {
+    const css = _serializeCSS('test', {
+      '&:disabled': {
+        opacity: 0.5,
+        cursor: 'not-allowed',
+      },
+    })
+    assert(css.includes(':disabled'), `expected :disabled, got: ${css}`)
+    assert(css.includes('cursor:not-allowed'), `expected cursor:not-allowed, got: ${css}`)
+  })
+
+  test('runtimeCss — multiple declarations', () => {
+    const css = _serializeCSS('test', {
+      backgroundColor: 'red',
+      padding: 16,
+      borderRadius: 4,
+    })
+    assert(css.includes('background-color:red'), `expected background-color:red, got: ${css}`)
+    assert(css.includes('padding:16px'), `expected padding:16px, got: ${css}`)
+    assert(css.includes('border-radius:4px'), `expected border-radius:4px, got: ${css}`)
+  })
+
+  test('runtimeCss — null and undefined values are skipped', () => {
+    const css = _serializeCSS('test', { color: 'red', padding: null, margin: undefined })
+    assert(css.includes('color:red'), `expected color:red, got: ${css}`)
+    assert(!css.includes('padding'), `expected no padding, got: ${css}`)
+    assert(!css.includes('margin'), `expected no margin, got: ${css}`)
+  })
+
+  console.log('\n── v5: Runtime — runtimeGlobalCss ──────────────────────────────')
+
+  test('runtimeGlobalCss — serializes selector-wrapped CSS', () => {
+    // We can't easily test DOM injection in Node, but we can test that it doesn't throw
+    let threw = false
+    try {
+      runtimeGlobalCss({ body: { margin: 0 } })
+    } catch {
+      threw = true
+    }
+    assert(!threw, 'runtimeGlobalCss should not throw in Node (SSR safe)')
+  })
+
+  console.log('\n── v5: Runtime — cx ────────────────────────────────────────────')
+
+  test('cx — joins strings with spaces', () => {
+    assert(cx('a', 'b') === 'a b', `expected "a b", got: "${cx('a', 'b')}"`)
+  })
+
+  test('cx — filters falsy values', () => {
+    const result = cx('a', false, 'b', undefined, null, 'c')
+    assert(result === 'a b c', `expected "a b c", got: "${result}"`)
+  })
+
+  test('cx — empty args returns empty string', () => {
+    assert(cx() === '', `expected "", got: "${cx()}"`)
+  })
+
+  test('cx — single arg returns the arg', () => {
+    assert(cx('only') === 'only', `expected "only", got: "${cx('only')}"`)
+  })
+
+  test('cx — all falsy returns empty string', () => {
+    assert(cx(false, null, undefined, 0, '') === '', `expected "", got: "${cx(false, null, undefined, 0, '')}"`)
+  })
+}
+
 // ─── summary ────────────────────────────────────────────────────────────────
+
+await Promise.all(pending)
 
 console.log(`\n${'─'.repeat(55)}`)
 console.log(`  ${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)
+

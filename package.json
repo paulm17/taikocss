@@ -25,6 +25,11 @@
       "types": "./types/css.d.ts",
       "import": "./src/css.js",
       "require": "./src/css.cjs"
+    },
+    "./runtime": {
+      "types": "./types/runtime.d.ts",
+      "import": "./src/runtime.js",
+      "require": "./src/runtime.cjs"
     }
   },
   "files": [
@@ -37,6 +42,8 @@
     "src/css.js",
     "src/css.cjs",
     "src/css.d.ts",
+    "src/runtime.js",
+    "src/runtime.cjs",
     "types/",
     "README.md",
     "CHANGELOG.md"

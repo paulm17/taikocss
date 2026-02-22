@@ -342,7 +342,7 @@ fn eval_value_expr(
                     Error::new(Status::InvalidArg, format!(
                         "{}:{}:{}: css() — 'theme' is referenced but no theme was provided to \
                          the plugin.\n\
-                         Hint: add a theme to pigment({{ theme: yourTheme }}) in vite.config.js.",
+                         Hint: add a theme to taiko({{ theme: yourTheme }}) in vite.config.js.",
                         filename, line, col
                     ))
                 })?;
@@ -576,7 +576,7 @@ fn extract_string_arg<'a>(
 
 fn process_css_object(
     obj: &ObjectExpression,
-    span_start: u32,
+    _span_start: u32,
     filename: &str,
     source: &str,
     theme: Option<&serde_json::Value>,
@@ -587,9 +587,8 @@ fn process_css_object(
     let inner = object_to_css(obj, 1, filename, source, theme, keyframe_names)?;
     let raw_css = format!(".css_obj {{\n{}}}\n", inner);
 
-    // 2. Hash the filename and AST node position to produce a stable, unique class name
-    let hash_input = format!("{}:{}", filename, span_start);
-    let hash = hash_css(&hash_input);
+    // 2. Hash the CSS content to produce a stable, content-addressed class name
+    let hash = hash_css(&inner);
     let class_name = format!("cls_{}", hash);
 
     process_raw_css_with_placeholder(&raw_css, &class_name, ".css_obj", filename, dir)
@@ -707,8 +706,7 @@ fn process_global_css_template(
         }
     }
 
-    let hash_input = format!("{}:{}", filename, tpl.span.start);
-    let hash = hash_css(&hash_input);
+    let hash = hash_css(&raw);
     let (css_code, css_map) = run_lightningcss(&raw, filename, dir)?;
     Ok((hash, css_code, css_map))
 }
@@ -749,8 +747,7 @@ fn process_keyframes_template(
     let placeholder_name = "__kf_placeholder__";
     let raw_css = format!("@keyframes {} {{ {} }}", placeholder_name, inner.trim());
 
-    let hash_input = format!("{}:{}", filename, tpl.span.start);
-    let hash = hash_css(&hash_input);
+    let hash = hash_css(&inner);
     let kf_name = format!("kf_{}", hash);
 
     let (css_code, css_map) = run_lightningcss(&raw_css, filename, dir)?;

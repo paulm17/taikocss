@@ -1,8 +1,8 @@
 // plugin.d.ts
 import type { Plugin } from 'vite'
-import type { Theme }  from './types/theme'
+import type { Theme } from './types/theme'
 
-export interface PigmentOptions {
+export interface TaikoOptions {
   /**
    * Design token theme. Passed to `css(({ theme }) => …)` calls at build time.
    * The theme object is never shipped to the browser.
@@ -30,16 +30,16 @@ export interface PigmentOptions {
  * @example
  * // vite.config.ts
  * import { defineConfig } from 'vite'
- * import { pigment }      from 'taikocss/vite'
+ * import { taiko }      from 'taikocss/vite'
  * import { myTheme }      from './src/theme'
  *
  * export default defineConfig({
- *   plugins: [pigment({ theme: myTheme })],
+ *   plugins: [taiko({ theme: myTheme })],
  * })
  */
-export declare function pigment(options?: PigmentOptions): Plugin
+export declare function taiko(options?: TaikoOptions): Plugin
 
 /**
- * @deprecated Use `pigment()` instead.
+ * @deprecated Use `taiko()` instead.
  */
 export declare const rustCssPlugin: Plugin

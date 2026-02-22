@@ -3,7 +3,7 @@ import { createRequire } from 'module'
 const require = createRequire(import.meta.url)
 
 function loadNative() {
-  try { return require('./loader.cjs') } catch {}
+  try { return require('./loader.cjs') } catch { }
   const platform = `${process.platform}-${process.arch}`
   try { return require(`@taikocss/core-${platform}`) } catch (e) {
     throw new Error(`taikocss: no prebuilt binary found for ${platform}.`)
@@ -34,7 +34,7 @@ function buildColorSchemeCSS(schemeName, variants) {
   return modules
 }
 
-export function pigment(options = {}) {
+export function taiko(options = {}) {
   const theme = options.theme ?? null
   const themeJson = theme ? JSON.stringify(theme) : null
   const dir = options.css?.defaultDirection ?? 'ltr'
@@ -75,7 +75,7 @@ export function pigment(options = {}) {
       const processRule = (rule, prefix) => {
         const vid = prefix ? `virtual:taikocss/${prefix}-${rule.hash}.css` : `virtual:taikocss/${rule.hash}.css`;
         const existing = cssMap.get(vid);
-        
+
         let version = cssVersions.get(vid) || 0;
 
         // If the Rust compiler gave us brand new or updated CSS
@@ -119,8 +119,24 @@ export function pigment(options = {}) {
         }
         return entry.css;
       }
+    },
+
+    handleHotUpdate({ file, server }) {
+      if (!/\.(t|j)sx?$/.test(file) || file.includes('node_modules')) return;
+
+      // Find all virtual CSS modules that might be affected and invalidate them
+      const affectedModules = [];
+      for (const [vid] of cssMap) {
+        const resolved = '\0' + vid;
+        const mod = server.moduleGraph.getModuleById(resolved);
+        if (mod) {
+          server.moduleGraph.invalidateModule(mod);
+          affectedModules.push(mod);
+        }
+      }
+      return affectedModules.length > 0 ? affectedModules : undefined;
     }
   }
 }
 
-export const rustCssPlugin = pigment()
+export const rustCssPlugin = taiko()

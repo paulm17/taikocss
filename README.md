@@ -57,10 +57,10 @@ No Rust toolchain is required — the native binary ships prebuilt for all suppo
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
-import { pigment } from 'taikocss/vite'
+import { taiko } from 'taikocss/vite'
 
 export default defineConfig({
-  plugins: [pigment()],
+  plugins: [taiko()],
 })
 ```
 
@@ -99,7 +99,7 @@ Styles update instantly on save via HMR — no full page reload for CSS-only cha
 | Import path | What it provides |
 |---|---|
 | `taikocss/css` | `css()`, `globalCss`, `keyframes`, `container()` — the authoring API |
-| `taikocss/vite` | `pigment()` — the Vite plugin factory |
+| `taikocss/vite` | `taiko()` — the Vite plugin factory |
 | `taikocss` | `transform()` — the raw Rust NAPI function, for advanced use |
 
 Always import your styles from `taikocss/css`. This resolves to a no-op shim in test/SSR environments and is replaced at build time by the Vite plugin — no manual shim creation required.
@@ -111,12 +111,12 @@ Always import your styles from `taikocss/css`. This resolves to a no-op shim in 
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
-import { pigment } from 'taikocss/vite'
+import { taiko } from 'taikocss/vite'
 import { myTheme } from './src/theme'
 
 export default defineConfig({
   plugins: [
-    pigment({
+    taiko({
       // Design token theme — passed into css() function calls at build time.
       theme: myTheme,
 
@@ -201,7 +201,7 @@ const bad = css({ fontSize: size })
 
 ### Defining a theme
 
-Create a theme file and pass it to `pigment()`. The theme is consumed entirely at build time — it never ships to the browser.
+Create a theme file and pass it to `taiko()`. The theme is consumed entirely at build time — it never ships to the browser.
 
 ```ts
 // src/theme.ts
@@ -566,7 +566,7 @@ When your application serves both LTR and RTL locales, set `generateForBothDir: 
 
 ```ts
 // vite.config.ts
-pigment({
+taiko({
   theme: myTheme,
   css: {
     defaultDirection: 'ltr',
@@ -618,10 +618,10 @@ module.exports = {
 ```ts
 // vitest.config.ts
 import { defineConfig } from 'vitest/config'
-import { pigment } from 'taikocss/vite'
+import { taiko } from 'taikocss/vite'
 
 export default defineConfig({
-  plugins: [pigment()],
+  plugins: [taiko()],
   test: { environment: 'jsdom' },
 })
 ```
